@@ -1,0 +1,284 @@
+/*
+https://qiita.com/Haru_3/items/eba8fdb296aa809e9546
+https://learning-collection.com/springboot%e5%85%a5%e9%96%80/
+
+https://qiita.com/k-tabuchi/items/81fa2c774f92c63125b5
+Spring アップロードファイルを読み込んで中身を表示する方法
+
+https://yossan.hatenablog.com/entry/2019/05/25/123853
+InputStreamReader 例
+OutputStreamWriter 例
+
+https://qiita.com/riekure/items/31c1a9e371c9020a4973
+ファイル書き込み機能を実装してみた
+
+
+
+*/
+
+
+package com.example.demo;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.beans.BeanUtils;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Optional; 
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.FileInputStream;
+import java.io.Reader;
+import java.io.BufferedReader;
+import javax.servlet.ServletOutputStream;
+import javax.servlet.http.HttpServletResponse;
+
+import com.example.demo.DemoService;
+import com.example.demo.DemoEntity;
+import com.example.demo.EditForm;
+import com.example.demo.MainForm;
+import com.example.demo.MainFormList;
+
+@Controller
+public class DemoController {
+
+	@Autowired
+	DemoService demoService;
+
+	@RequestMapping(path = "/{path}", method = {RequestMethod.GET, RequestMethod.POST})
+	public String main(
+	@PathVariable String path,
+	@RequestParam(name = "mode", required = false) String mode,
+	MainForm mainForm,
+	EditForm editForm,
+	Model model) {
+
+	System.out.println("mode:" + mode);
+
+	DemoEntity demoEntity;
+	Integer mainFormList_pkid;
+
+	if ("main".equals(path)) {
+
+		List<DemoEntity> list_findAll = demoService.findAll();
+		List<MainFormList> mainFormList_findAll = new ArrayList<MainFormList>(list_findAll.size());
+
+		list_findAll.forEach(list_detail -> {
+			MainFormList list_temp = new MainFormList();
+			BeanUtils.copyProperties(list_detail, list_temp);
+
+			System.out.println("list_temp.getPkid():" + list_temp.getPkid());
+			mainFormList_findAll.add(list_temp);
+		});
+
+		mainForm.setMainFormList(mainFormList_findAll);
+		System.out.println("mainForm:" + mainForm);
+
+		model.addAttribute("mainForm",mainForm);
+
+        return "index.html";
+    }
+
+	if ("create".equals(path)) {
+		switch (mode) {
+		case "create":
+			editForm = new EditForm();
+			editForm.setPath(path);
+			return "edit.html";
+		case "regist":
+			demoEntity = new DemoEntity();
+			BeanUtils.copyProperties(editForm, demoEntity);
+			demoService.create(demoEntity);
+			return "redirect:/main";
+		case "back":
+			return "redirect:/main";
+		default:
+			return "redirect:/main";
+		}
+	}
+
+	if ("edit".equals(path)) {
+		switch (mode) {
+		case "edit":
+
+			mainFormList_pkid = 0;
+			for (MainFormList mainFormList : mainForm.getMainFormList()) {
+				if (mainFormList.getSelectCheckboxs().length > 0) {
+					mainFormList_pkid = mainFormList.getSelectCheckboxs()[0];
+					System.out.println("mainFormList_pkid:" + mainFormList_pkid);
+					break;
+				}
+			}
+
+			if (mainFormList_pkid == 0) {
+				return "redirect:/main";
+			}
+			demoEntity = demoService.findById(mainFormList_pkid);
+			BeanUtils.copyProperties(demoEntity, editForm);
+			editForm.setPath(path);
+			return "edit.html";
+		case "regist":
+			demoEntity = new DemoEntity();
+			BeanUtils.copyProperties(editForm, demoEntity);
+			demoService.update(demoEntity);
+			return "redirect:/main";
+		case "back":
+			return "redirect:/main";
+		default:
+			return "redirect:/main";
+		}
+	}
+
+	if ("delete".equals(path)) {
+		mainFormList_pkid = 0;
+		for (MainFormList mainFormList : mainForm.getMainFormList()) {
+			if (mainFormList.getSelectCheckboxs().length > 0) {
+				mainFormList_pkid = mainFormList.getSelectCheckboxs()[0];
+				demoService.delete(mainFormList_pkid);
+			}
+		}
+		return "redirect:/main";
+	}
+
+/*
+
+	@PostMapping(path = "upload")
+	String upload(MainForm mainForm) {
+		System.out.println("upload");
+		MultipartFile mp_file = mainForm.getMainForm_file();
+		String fileName = mp_file.getOriginalFilename();
+		System.out.println("fileName:" + fileName);
+
+		List<String> lines = new ArrayList<String>();
+		String line = null;
+		String[] line_split = null;
+		DemoEntity demoEntity = new DemoEntity();
+
+		try {
+			InputStream stream = mp_file.getInputStream();
+			Reader reader = new InputStreamReader(stream);
+			BufferedReader buf= new BufferedReader(reader);
+			while((line = buf.readLine()) != null) {
+				System.out.println("controller line:" + line);
+
+				if (line.equals("")) {
+					continue;
+				}
+
+				line_split = line.split(",");
+				for (int i = 0;i < line_split.length;i++) {
+					line_split[i] = line_split[i].replace("\"","");
+					line_split[i] = line_split[i].replace("'","");
+				}
+
+				System.out.println("line_split:" + line_split);
+				demoEntity.setPkid(Integer.parseInt(line_split[0]));
+				demoEntity.setName(line_split[1]);
+				demoEntity.setWins(Integer.parseInt(line_split[2]));
+				demoEntity.setBest(Integer.parseInt(line_split[3]));
+				demoEntity.setSize(Float.parseFloat(line_split[4]));
+
+				demoService.create(demoEntity);
+//				demoService.create(line);
+				System.out.println("create(line) finished");
+			}
+			line = buf.readLine();
+
+		} catch (IOException e) {
+			line = "Can't read contents.";
+			lines.add(line);
+			e.printStackTrace();
+		}
+
+		System.out.println("no catch");
+		return "redirect:/";
+	}
+*/
+
+
+/*
+// http://javatec.blog105.fc2.com/blog-entry-22.html
+	@PostMapping(path = "download")
+//	@ResponseBody
+	String download(MainForm mainForm,HttpServletResponse response) {
+		System.out.println("download");
+
+		Integer[] temp_Checkboxs;
+		String temp_result = "";
+		temp_Checkboxs = mainForm.getSelectCheckboxs();
+
+		String str = "";
+
+		for(int i =0;i < temp_Checkboxs.length;i++) {
+			System.out.println("temp_Checkboxs[i]:" + String.valueOf(temp_Checkboxs[i]));
+			temp_result = temp_result + "temp_Checkboxs[i]:" + temp_Checkboxs[i] + "<br>";
+
+			DemoEntity demoEntity = demoService.findById(temp_Checkboxs[i]);
+
+			System.out.println("demoEntity.pkid:" + demoEntity.getPkid());
+			System.out.println("demoEntity.name:" + demoEntity.getName());
+			System.out.println("");
+
+			str = str +
+			demoEntity.getPkid() + "," +
+			"\"" + demoEntity.getName() + "\"" + "," +
+			demoEntity.getWins() + "," +
+			demoEntity.getBest() + "," +
+			demoEntity.getSize() + "\r\n";
+
+		}; // for(int i =0;i < temp_Checkboxs.length;i++) {
+
+		try{
+
+		byte[] buff = str.getBytes();
+
+		response.setContentType("application/octet-stream; charset=UTF-8");
+		response.setHeader("Content-Disposition","attachment; filename=list.csv");
+		response.setContentLength(buff.length);
+
+		 ServletOutputStream os = response.getOutputStream();
+		 os.write(buff);
+		 os.close();
+		}
+		catch(IOException e){
+		 e.printStackTrace();
+		}
+
+		return "/";
+//		return temp_result;
+	}
+
+	@PostMapping(path = "sub_win")
+//	String edit(Integer list_pkid, EditForm editForm) {
+	String sub_win(@RequestParam (name = "list_pkid", required = false)Integer list_pkid, EditForm editForm) {
+		System.out.println("list_pkid:" + list_pkid);
+		DemoEntity demoEntity = demoService.findById(list_pkid);
+		BeanUtils.copyProperties(demoEntity, editForm);
+		System.out.println("demoEntity:" + demoEntity);
+		System.out.println("editForm:" + editForm);
+		return "edit.html";
+	}
+*/
+		System.out.println("no catch");
+		return "redirect:/main";
+	}
+}
